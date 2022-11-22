@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 카메라 권한이 필요합니다. any 를 지정하면 전면 또는 후면 카메라를 의미합니다. -->
+    <!-- 오디오를 녹음하려면 마이크 권한이 필요합니다.-->
+    <!-- 안드로이드 9(P) 이하에서는 MediaStore 외부 저장소 쓰기 권한이 필요합니다. -->
     <uses-feature android:name="android.hardware.camera.any" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
