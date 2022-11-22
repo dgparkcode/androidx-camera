@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">camerax</string>
-    <string name="main_capture">Capture</string>
+    <string name="main_take_photo">Capture</string>
 </resources>

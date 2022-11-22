@@ -23,9 +23,10 @@
         app:layout_constraintGuide_percent=".5" />
 
     <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/take_photo_btn"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/main_capture"
+        android:text="@string/main_take_photo"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toLeftOf="@id/center_guideline"
