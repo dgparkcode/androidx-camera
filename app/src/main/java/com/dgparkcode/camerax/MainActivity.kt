@@ -1,34 +1,26 @@
 package com.dgparkcode.camerax
 
 import android.Manifest
-import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.PermissionChecker
 import com.dgparkcode.camerax.databinding.ActivityMainBinding
-import java.text.SimpleDateFormat
-import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var imageCapture: ImageCapture? = null
-    private var videoCapture: VideoCapture<Recorder>? = null
-    private var recording: Recording? = null
+    private var imageAnalysis: ImageAnalysis? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,8 +34,7 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
         }
 
-        binding.takePhotoBtn.setOnClickListener { takePhoto() }
-        binding.videoCaptureBtn.setOnClickListener { captureVideo() }
+        binding.reScanBtn.setOnClickListener { startCamera() }
     }
 
     private fun allPermissionsGranted(): Boolean {
@@ -79,20 +70,22 @@ class MainActivity : AppCompatActivity() {
                     it.setSurfaceProvider(binding.previewView.surfaceProvider)
                 }
 
-                // 이미지 캡쳐 객체를 생성합니다.
-                imageCapture = ImageCapture.Builder().build()
-
-                // 레코더를 생성하고 비디오 캡쳐 객체를 생성합니다.
-                // 이미지 캡쳐할때 HIGHEST 지원을 하지 않을 경우 HD 를 사용하도록 설정합니다.
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(
-                        QualitySelector.from(
-                            Quality.HIGHEST,
-                            FallbackStrategy.higherQualityOrLowerThan(Quality.HD)
-                        )
-                    )
+                imageAnalysis = ImageAnalysis.Builder()
+                    .setTargetResolution(Size(binding.previewView.width, binding.previewView.height))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                videoCapture = VideoCapture.withOutput(recorder)
+                    .also {
+                        it.setAnalyzer(
+                            ContextCompat.getMainExecutor(this),
+                            QrCodeAnalyzer { qrResult ->
+                                Log.d(TAG, "Barcode scanned: ${qrResult.text}")
+                                // QR 코드 스캔에 성공하면 프리뷰 바인드를 해제해서 프리뷰를 멈추고,
+                                // 버튼을 활성화해서 다시 시작할 수 있는 기능을 제공한다.
+                                cameraProvider.unbind(preview)
+                                binding.reScanBtn.isEnabled = true
+                            }
+                        )
+                    }
 
                 // 후면 카메라를 기본으로 설정합니다.
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -107,9 +100,12 @@ class MainActivity : AppCompatActivity() {
                         this,
                         cameraSelector,
                         preview,
-                        imageCapture,
-                        videoCapture
+                        imageAnalysis
                     )
+
+                    // 카메라 기능이 시작되면 버튼을 비활성화 합니다.
+                    binding.reScanBtn.isEnabled = false
+
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -120,124 +116,8 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun takePhoto() {
-        // startCamera 에서 객체가 생성되지 않았다면 로직을 진행하지 않습니다.
-        val imageCapture = this.imageCapture ?: return
-
-        // 이미지 파일을 저장할때 사용할 정보를 설정합니다.
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            // 안드로이드 9(P)보다 버전이 높을 경우 항목을 추가합니다.
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
-            }
-        }
-
-        // 파일, 메타정보 출력 옵션입니다.
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(
-            contentResolver, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues
-        ).build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded: ${outputFileResults.savedUri}"
-                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-                    Log.d(TAG, msg)
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Log.e(TAG, "Photo capture failed: ${exception.message}", exception)
-                }
-            })
-    }
-
-    private fun captureVideo() {
-        val videoCapture = this.videoCapture ?: return
-
-        // 캡쳐 버튼을 비활성화 합니다.
-        binding.videoCaptureBtn.isEnabled = false
-
-        // 녹화 중인 상태일 경우 멈추고 기존 객체를 제거합니다.
-        val curRecording = recording
-        if (curRecording != null) {
-            curRecording.stop()
-            recording = null
-            return
-        }
-
-        // 동영상 저장시 필요한 정보를 설정합니다.
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            // 안드로이드 9(P) 버전보다 높을 경우 설정 값을 추가합니다.
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/CameraX-Video")
-            }
-        }
-
-        // 비디오 아웃풋 옵션을 설정합니다.
-        val mediaStoreOutputOptions = MediaStoreOutputOptions
-            .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-            .setContentValues(contentValues)
-            .build()
-
-        // 레코딩 객체를 생성합니다.
-        recording = videoCapture.output
-            .prepareRecording(this, mediaStoreOutputOptions)
-            .apply {
-                // 오디오 권한이 승인된 경우에만 오디오를 추가합니다.
-                if (PermissionChecker.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PermissionChecker.PERMISSION_GRANTED
-                ) {
-                    withAudioEnabled()
-                }
-            }
-            .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
-                when(recordEvent) {
-                    is VideoRecordEvent.Start -> {
-                        // 녹화가 시작되면 스톱으로 버튼 텍스트를 변경합니다.
-                        binding.videoCaptureBtn.apply {
-                            text = getString(R.string.main_stop_capture)
-                            isEnabled = true
-                        }
-                    }
-                    is VideoRecordEvent.Finalize -> {
-                        if (!recordEvent.hasError()) {
-                            // 녹화가 끝나고 에러가 없다면 저장경로를 표시합니다.
-                            val msg = "Video capture succeeded: " +
-                                    "${recordEvent.outputResults.outputUri}"
-                            Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT)
-                                .show()
-                            Log.d(TAG, msg)
-                        } else {
-                            // 녹화중이라면 종료합니다.
-                            // 에러가 있다면 에러 내용을 표시합니다.
-                            recording?.close()
-                            recording = null
-                            Log.e(TAG, "Video capture ends with error: " +
-                                    "${recordEvent.error}")
-                        }
-                        // 버튼을 초기상태로 변경합니다.
-                        binding.videoCaptureBtn.apply {
-                            text = getString(R.string.main_start_capture)
-                            isEnabled = true
-                        }
-                    }
-                }
-            }
-    }
-
     companion object {
         private const val TAG = "MainActivity"
-        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val REQUEST_CODE_PERMISSIONS = 10
 
         // 필수 권한 목록입니다.

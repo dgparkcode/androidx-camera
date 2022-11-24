@@ -3,4 +3,5 @@
     <string name="main_take_photo">Capture</string>
     <string name="main_stop_capture">Stop capture</string>
     <string name="main_start_capture">Start capture</string>
+    <string name="main_re_scan">Re scan</string>
 </resources>
