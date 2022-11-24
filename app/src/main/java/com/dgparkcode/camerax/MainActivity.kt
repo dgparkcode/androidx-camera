@@ -83,8 +83,14 @@ class MainActivity : AppCompatActivity() {
                 imageCapture = ImageCapture.Builder().build()
 
                 // 레코더를 생성하고 비디오 캡쳐 객체를 생성합니다.
+                // 이미지 캡쳐할때 HIGHEST 지원을 하지 않을 경우 HD 를 사용하도록 설정합니다.
                 val recorder = Recorder.Builder()
-                    .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                    .setQualitySelector(
+                        QualitySelector.from(
+                            Quality.HIGHEST,
+                            FallbackStrategy.higherQualityOrLowerThan(Quality.HD)
+                        )
+                    )
                     .build()
                 videoCapture = VideoCapture.withOutput(recorder)
 
@@ -96,8 +102,14 @@ class MainActivity : AppCompatActivity() {
                     // usecases 는 다중인자이므로 이미지캡쳐 객체도 바인드 합니다.
                     cameraProvider.unbindAll()
 
-                    // 이미지 캡쳐에서 비디오 캡쳐로 변경합니다.
-                    cameraProvider.bindToLifecycle(this, cameraSelector, preview, videoCapture)
+                    // 이미지 캡쳐와 비디오 캡쳐를 모두 추가합니다.
+                    cameraProvider.bindToLifecycle(
+                        this,
+                        cameraSelector,
+                        preview,
+                        imageCapture,
+                        videoCapture
+                    )
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
