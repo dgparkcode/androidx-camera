@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">qrcode</string>
+    <string name="main_re_scan">Re Scan</string>
+</resources>
